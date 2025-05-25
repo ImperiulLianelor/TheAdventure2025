@@ -16,25 +16,49 @@
          "id":0,
          "image":"grass_001.png",
          "imageheight":16,
-         "imagewidth":16
+         "imagewidth":16,
+         "properties":[
+                {
+                 "name":"isSolid",
+                 "type":"bool",
+                 "value":false
+                }]
         }, 
         {
          "id":1,
          "image":"grass_002.png",
          "imageheight":16,
-         "imagewidth":16
+         "imagewidth":16,
+         "properties":[
+                {
+                 "name":"isSolid",
+                 "type":"bool",
+                 "value":false
+                }]
         }, 
         {
          "id":2,
          "image":"grass_003.png",
          "imageheight":16,
-         "imagewidth":16
+         "imagewidth":16,
+         "properties":[
+                {
+                 "name":"isSolid",
+                 "type":"bool",
+                 "value":true
+                }]
         }, 
         {
          "id":3,
          "image":"grass_004.png",
          "imageheight":16,
-         "imagewidth":16
+         "imagewidth":16,
+         "properties":[
+                {
+                 "name":"isSolid",
+                 "type":"bool",
+                 "value":true
+                }]
         }],
  "tilewidth":16,
  "type":"tileset",

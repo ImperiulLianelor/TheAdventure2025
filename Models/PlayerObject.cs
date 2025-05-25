@@ -1,4 +1,4 @@
-using Silk.NET.Maths;
+using Silk.NET.Maths; // Make sure this using is present for Rectangle<int>
 
 namespace TheAdventure.Models;
 
@@ -24,126 +24,165 @@ public class PlayerObject : RenderableGameObject
         GameOver
     }
 
-    public (PlayerState State, PlayerStateDirection Direction) State { get; private set; }
+    public (PlayerState State, PlayerStateDirection Direction) CurrentVisualState { get; private set; } // Renamed for clarity
 
     public PlayerObject(SpriteSheet spriteSheet, int x, int y) : base(spriteSheet, (x, y))
     {
-        SetState(PlayerState.Idle, PlayerStateDirection.Down);
+        SetVisualState(PlayerState.Idle, PlayerStateDirection.Down);
     }
 
-    public void SetState(PlayerState state)
+    public void SetVisualState(PlayerState state) // Renamed method
     {
-        SetState(state, State.Direction);
+        SetVisualState(state, CurrentVisualState.Direction);
     }
 
-    public void SetState(PlayerState state, PlayerStateDirection direction)
+    public void SetVisualState(PlayerState state, PlayerStateDirection direction) // Renamed method
     {
-        if (State.State == PlayerState.GameOver)
+        if (CurrentVisualState.State == PlayerState.GameOver && state != PlayerState.GameOver) // Allow setting GameOver once
         {
             return;
         }
 
-        if (State.State == state && State.Direction == direction)
+        if (CurrentVisualState.State == state && CurrentVisualState.Direction == direction)
         {
             return;
         }
 
+        string? animationName = null;
         if (state == PlayerState.None && direction == PlayerStateDirection.None)
         {
-            SpriteSheet.ActivateAnimation(null);
+            animationName = null;
         }
-
         else if (state == PlayerState.GameOver)
         {
-            SpriteSheet.ActivateAnimation(Enum.GetName(state));
+            animationName = Enum.GetName(state); // e.g., "GameOver"
         }
         else
         {
-            var animationName = Enum.GetName(state) + Enum.GetName(direction);
-            SpriteSheet.ActivateAnimation(animationName);
+            animationName = Enum.GetName(state) + Enum.GetName(direction); // e.g., "IdleDown", "MoveUp"
         }
-
-        State = (state, direction);
+        SpriteSheet.ActivateAnimation(animationName);
+        
+        CurrentVisualState = (state, direction);
     }
 
     public void GameOver()
     {
-        SetState(PlayerState.GameOver, PlayerStateDirection.None);
+        SetVisualState(PlayerState.GameOver, PlayerStateDirection.None);
     }
 
     public void Attack()
     {
-        if (State.State == PlayerState.GameOver)
+        if (CurrentVisualState.State == PlayerState.GameOver)
         {
             return;
         }
-
-        var direction = State.Direction;
-        SetState(PlayerState.Attack, direction);
+        // Use current facing direction for attack animation
+        SetVisualState(PlayerState.Attack, CurrentVisualState.Direction);
     }
 
-    public void UpdatePosition(double up, double down, double left, double right, int width, int height, double time)
+    // ADDED: Method to get the player's world bounding box based on current position and sprite.
+    public Rectangle<int> GetWorldBoundingBox()
     {
-        if (State.State == PlayerState.GameOver)
+        // Position is the 'anchor' or 'center' defined by SpriteSheet.FrameCenter.
+        // To get the top-left corner of the visual sprite:
+        int topLeftX = Position.X - SpriteSheet.FrameCenter.OffsetX;
+        int topLeftY = Position.Y - SpriteSheet.FrameCenter.OffsetY;
+        return new Rectangle<int>(topLeftX, topLeftY, SpriteSheet.FrameWidth, SpriteSheet.FrameHeight);
+    }
+
+    // ADDED: Helper to get bounding box if player *were* at a specific potential position.
+    private Rectangle<int> GetWorldBoundingBoxAt(int potentialWorldX, int potentialWorldY)
+    {
+        int topLeftX = potentialWorldX - SpriteSheet.FrameCenter.OffsetX;
+        int topLeftY = potentialWorldY - SpriteSheet.FrameCenter.OffsetY;
+        return new Rectangle<int>(topLeftX, topLeftY, SpriteSheet.FrameWidth, SpriteSheet.FrameHeight);
+    }
+
+    // MODIFIED: Method signature and internal logic for collision.
+    public void UpdatePosition(double up, double down, double left, double right,
+                               double timeDeltaMs, Engine gameEngine)
+    {
+        if (CurrentVisualState.State == PlayerState.GameOver)
         {
             return;
         }
 
-        var pixelsToMove = _speed * (time / 1000.0);
+        var pixelsToMoveTotal = _speed * (timeDeltaMs / 1000.0);
+        var oldPosition = Position;
 
-        var x = Position.X + (int)(right * pixelsToMove);
-        x -= (int)(left * pixelsToMove);
+        // Calculate desired displacement
+        double deltaX = (right * pixelsToMoveTotal) - (left * pixelsToMoveTotal);
+        double deltaY = (down * pixelsToMoveTotal) - (up * pixelsToMoveTotal);
 
-        var y = Position.Y + (int)(down * pixelsToMove);
-        y -= (int)(up * pixelsToMove);
+        var targetPosition = Position; // Start with current position
 
-        var newState = State.State;
-        var newDirection = State.Direction;
-
-        if (x == Position.X && y == Position.Y)
+        // --- X-axis movement and collision ---
+        if (deltaX != 0)
         {
-            if (State.State == PlayerState.Attack)
+            int potentialX = Position.X + (int)deltaX;
+            var testBoxX = GetWorldBoundingBoxAt(potentialX, Position.Y);
+            if (!gameEngine.CheckTileCollision(testBoxX))
             {
-                if (SpriteSheet.AnimationFinished)
-                {
-                    newState = PlayerState.Idle;
-                }
+                targetPosition.X = potentialX;
             }
-            else
-            {
-                newState = PlayerState.Idle;
-            }
-        }
-        else
-        {
-            newState = PlayerState.Move;
-            
-            if (y < Position.Y && newDirection != PlayerStateDirection.Up)
-            {
-                newDirection = PlayerStateDirection.Up;
-            }
-
-            if (y > Position.Y && newDirection != PlayerStateDirection.Down)
-            {
-                newDirection = PlayerStateDirection.Down;
-            }
-
-            if (x < Position.X && newDirection != PlayerStateDirection.Left)
-            {
-                newDirection = PlayerStateDirection.Left;
-            }
-
-            if (x > Position.X && newDirection != PlayerStateDirection.Right)
-            {
-                newDirection = PlayerStateDirection.Right;
-            }
+            // Else: Collision detected in X, targetPosition.X remains Position.X
         }
 
-        if (newState != State.State || newDirection != State.Direction)
+        // --- Y-axis movement and collision ---
+        // Check Y-axis collision based on the potentially updated X (targetPosition.X)
+        // This allows sliding along walls.
+        if (deltaY != 0)
         {
-            SetState(newState, newDirection);
+            int potentialY = Position.Y + (int)deltaY;
+            var testBoxY = GetWorldBoundingBoxAt(targetPosition.X, potentialY); 
+            if (!gameEngine.CheckTileCollision(testBoxY))
+            {
+                targetPosition.Y = potentialY;
+            }
+            // Else: Collision detected in Y, targetPosition.Y remains Position.Y
+        }
+        
+        Position = targetPosition; // Apply the final, collision-checked position
+
+        // --- Update Visual State and Direction logic ---
+        var newPlayerState = CurrentVisualState.State;
+        var newDirection = CurrentVisualState.Direction;
+
+        bool moved = (Position.X != oldPosition.X) || (Position.Y != oldPosition.Y);
+
+        if (CurrentVisualState.State == PlayerState.Attack)
+        {
+            if (SpriteSheet.AnimationFinished)
+            {
+                newPlayerState = PlayerState.Idle; // Default to idle after attack finishes
+            }
+            // else, keep Attack state until animation finishes
+        }
+        else if (moved)
+        {
+            newPlayerState = PlayerState.Move;
+            // Determine direction based on input primarily, then actual movement
+            if (up > 0) newDirection = PlayerStateDirection.Up;
+            else if (down > 0) newDirection = PlayerStateDirection.Down;
+            else if (left > 0) newDirection = PlayerStateDirection.Left;
+            else if (right > 0) newDirection = PlayerStateDirection.Right;
+            // Fallback if no input but position changed (e.g., pushed - not applicable here yet)
+            else if (Position.Y < oldPosition.Y) newDirection = PlayerStateDirection.Up;
+            else if (Position.Y > oldPosition.Y) newDirection = PlayerStateDirection.Down;
+            else if (Position.X < oldPosition.X) newDirection = PlayerStateDirection.Left;
+            else if (Position.X > oldPosition.X) newDirection = PlayerStateDirection.Right;
+        }
+        else // Not moving and not attacking (or attack finished)
+        {
+            newPlayerState = PlayerState.Idle;
+            // Keep current facing direction when idling
         }
 
-        Position = (x, y);
+        // Only update animation if state or direction actually changes
+        if (newPlayerState != CurrentVisualState.State || newDirection != CurrentVisualState.Direction)
+        {
+            SetVisualState(newPlayerState, newDirection);
+        }
     }
 }

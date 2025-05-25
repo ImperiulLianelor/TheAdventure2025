@@ -22,9 +22,21 @@
       </Content>
     </ItemGroup>
 
-    <ItemGroup>
-      <Compile Remove="Assets\Scripts\RandomBomb.script.cs" />
-      <ClCompile Include="Assets\Scripts\RandomBomb.script.cs" />
-    </ItemGroup>
+          
+<ItemGroup>
+  <!-- This ensures the script is not compiled as part of the main assembly -->
+  <Compile Remove="Assets\Scripts\RandomBomb.script.cs" Condition="Exists('Assets\Scripts\RandomBomb.script.cs')" />
+  
+  <!-- This ensures the .script.cs file is copied to the output directory so ScriptEngine can find it. -->
+  <!-- The broader <Content Include="Assets\**\*"> might already cover this, -->
+  <!-- but being explicit for scripts can be good. -->
+  <!-- If it is already covered, this <None Update...> might not be strictly necessary, -->
+  <!-- but the <ClCompile> definitely needs to go. -->
+  <None Update="Assets\Scripts\RandomBomb.script.cs" Condition="Exists('Assets\Scripts\RandomBomb.script.cs')">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </None>
+</ItemGroup>
+
+    
 
 </Project>
